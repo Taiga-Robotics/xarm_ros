@@ -102,6 +102,7 @@ namespace xarm_control
 
 		ros::Duration read_duration_;
 		ros::Duration write_duration_;
+		float velo_duration;
 
 		ros::NodeHandle root_nh_;
 		ros::NodeHandle hw_nh_;

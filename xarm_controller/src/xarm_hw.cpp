@@ -34,6 +34,9 @@ namespace xarm_control
 		if (joint_limits_interface::getJointLimits(joint_name, root_nh, joint_limits))
 			has_limits = true;
 
+		if (joint_limits_interface::getSoftJointLimits(joint_name, root_nh, soft_joint_limits))
+			has_soft_limits = true;
+
 		if (!has_limits)
 			return;
 
@@ -156,6 +159,8 @@ namespace xarm_control
 		root_nh_ = root_nh;
 		bool velocity_control = false;
 		robot_hw_nh.getParam("velocity_control", velocity_control);
+		hw_nh_.param<float>("velo_duration", velo_duration, VELO_DURATION);
+		ROS_WARN("==HW VELO DURATION %f", velo_duration);
 		// ctrl_method_ = EFFORT; // INVALID
 		// ctrl_method_ = VELOCITY; // INVALID
 		if (velocity_control) {
@@ -452,8 +457,6 @@ namespace xarm_control
 			{
 				for (int k = 0; k < dof_; k++) { cmds_float_[k] = (float)velocity_cmds_[k]; }
 				// cmd_ret = xarm.veloMoveJoint(cmds_float_, true, VELO_DURATION);
-				float velo_duration = VELO_DURATION;
-				hw_nh_.param<float>("velo_duration", velo_duration, VELO_DURATION);
 				cmd_ret = xarm_driver_.arm->vc_set_joint_velocity(cmds_float_, true, velo_duration);
 			}
 			break;
