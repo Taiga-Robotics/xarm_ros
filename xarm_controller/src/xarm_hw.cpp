@@ -220,8 +220,8 @@ namespace xarm_control
 			root_nh.getParam(locked_ip_key_, ip_locked);
 		}
 		if (ip_locked) {
-			ROS_ERROR("The same robotic arm can only be controlled by one controller, please check whether multiple controllers are started, the current controller has exited.");
-			return false;
+			ROS_WARN("The same robotic arm can only be controlled by one controller, please check whether multiple controllers are started.");
+			// return false;
 		}
 		else {
 			root_nh.setParam(locked_ip_key_, true);

@@ -640,7 +640,7 @@ namespace xarm_api
         float offsets[6] = {req.x, req.y, req.z, req.roll, req.pitch, req.yaw};
         res.ret = arm->set_tcp_offset(offsets);
         if (res.ret >= 0)
-            arm->save_conf();
+            // arm->save_conf();
         res.message = "set tcp offset: ret = " + std::to_string(res.ret); 
         return true;
     }
@@ -651,7 +651,7 @@ namespace xarm_api
         float CoM[3] = {req.xc, req.yc, req.zc};
         res.ret = arm->set_tcp_load(Mass, CoM);
         if (res.ret >= 0)
-            arm->save_conf();
+            // arm->save_conf();
         res.message = "set load: ret = " + std::to_string(res.ret); 
         return true;
     }
@@ -1274,7 +1274,7 @@ namespace xarm_api
         float offsets[6] = {req.x, req.y, req.z, req.roll, req.pitch, req.yaw};
         res.ret = arm->set_world_offset(offsets);
         if (res.ret >= 0)
-            arm->save_conf();
+            // arm->save_conf();
         res.message = "set world offset: ret = " + std::to_string(res.ret); 
         return true;
     }
