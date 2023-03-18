@@ -232,7 +232,7 @@ namespace xarm_api
         xarm_state_msg_.angle.resize(dof_);
 
         // state feedback topics:
-        joint_state_ = nh_.advertise<sensor_msgs::JointState>("joint_states", 10, true);
+        joint_state_ = nh_.advertise<sensor_msgs::JointState>("deleteme/joint_states", 10, true);
         robot_rt_state_ = nh_.advertise<xarm_msgs::RobotMsg>("xarm_states", 10, true);
         cgpio_state_ = nh_.advertise<xarm_msgs::CIOState>("controller_gpio_states", 10, true);
         ftsensor_ext_state_ = nh_.advertise<geometry_msgs::WrenchStamped>("uf_ftsensor_ext_states", 10, true);
