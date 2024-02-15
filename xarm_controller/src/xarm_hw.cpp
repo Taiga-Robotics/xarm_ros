@@ -95,7 +95,6 @@ namespace xarm_control
 		read_code_ = 0;
 		write_code_ = 0;
 
-		// pos_sub_ = root_nh.subscribe(jnt_state_topic, 100, &XArmHW::pos_fb_cb, this);
 		// state_sub_ = root_nh.subscribe(xarm_state_topic, 100, &XArmHW::state_fb_cb, this);
 		// wrench_sub_ = root_nh.subscribe(xarm_ftsensor_states_topic, 100, &XArmHW::ftsensor_fb_cb, this);
 
@@ -262,32 +261,6 @@ namespace xarm_control
 		xarm_driver_.arm->set_mode(XARM_MODE::POSE);
 		root_nh_.setParam(locked_ip_key_, false);
 		// xarm.setMode(XARM_MODE::POSE);
-	}
-
-	void XArmHW::pos_fb_cb(const sensor_msgs::JointState::ConstPtr& data)
-	{
-		if (data->header.stamp <= last_joint_state_stamp_) return;
-		if (data->name[0]!=jnt_names_[0]) 
-		{	
-			// in case that the gripper joints are independently published, 
-			// then the index j will not be valid for xArm joints  
-			return; 
-		}
-
-		// static int call_cnt = 0;
-		std::lock_guard<std::mutex> locker(mutex_);
-		for(int j=0; j<dof_; j++)
-		{
-			position_states_[j] = data->position[j];
-			velocity_states_[j] = data->velocity[j];
-			effort_states_[j] = data->effort[j];
-		}
-		last_joint_state_stamp_ = data->header.stamp;
-
-		if(!pos_fdb_called_)
-		{
-			pos_fdb_called_ = true;
-		}
 	}
 
 	void XArmHW::state_fb_cb(const xarm_msgs::RobotMsg::ConstPtr& data)
