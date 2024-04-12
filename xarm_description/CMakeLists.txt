@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 2.8.3)
 project(xarm_description)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
@@ -197,6 +197,7 @@ include_directories(
 install(DIRECTORY 
   launch
   meshes
+  config
   urdf 
   srdf
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
