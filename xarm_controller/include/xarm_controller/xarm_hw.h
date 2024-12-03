@@ -35,6 +35,8 @@
 // #include "xarm_api/xarm_ros_client.h"
 #include "xarm_api/xarm_driver.h"
 
+#include <std_msgs/String.h>
+#include <realtime_tools/realtime_publisher.h>
 
 namespace xarm_control
 {
@@ -62,6 +64,8 @@ namespace xarm_control
 		/* check whether the controller needs to be reset due to error or mode change */
 		bool need_reset();
 		bool wait_fbk_start(ros::Duration timeout);
+	
+		void ros_error(std::string errstring);
 	
 	protected:
 		enum ControlMethod {POSITION, VELOCITY, EFFORT};
@@ -145,6 +149,7 @@ namespace xarm_control
 
 		ros::Subscriber pos_sub_, vel_sub_, effort_sub_, state_sub_;
 		// ros::Subscriber wrench_sub_;
+		std::shared_ptr<realtime_tools::RealtimePublisher<std_msgs::String> > diag_pub_;
 
 		void clientInit(const std::string& robot_ip, ros::NodeHandle &root_nh);
 		void pos_fb_cb(const sensor_msgs::JointState::ConstPtr& data);

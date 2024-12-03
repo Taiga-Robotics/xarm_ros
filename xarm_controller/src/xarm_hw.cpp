@@ -252,6 +252,9 @@ namespace xarm_control
 		root_nh.getParam("/robot_description", robot_description);
 		model_ptr_ = urdf::parseURDF(robot_description);
 
+		diag_pub_.reset(new realtime_tools::RealtimePublisher<std_msgs::String>(hw_nh_, "diagnostics", 1));
+		diag_pub_->msg_.data="";
+
 		clientInit(robot_ip, robot_hw_nh);
 		return true;
 	}
@@ -471,7 +474,8 @@ namespace xarm_control
 		int curr_err = xarm_driver_.curr_err;
         if (curr_err != 0) {
             if (last_err != curr_err) {
-                ROS_ERROR("[ns: %s] Controller Error detected! C%d: [ %s ]", hw_ns_.c_str(), curr_err, xarm_driver_.controller_error_interpreter().c_str());
+                // ROS_ERROR("[ns: %s] Controller Error detected! C%d: [ %s ]", hw_ns_.c_str(), curr_err, xarm_driver_.controller_error_interpreter().c_str());
+				ros_error("Controller Error detected! C" + std::to_string(curr_err) + ": " + xarm_driver_.controller_error_interpreter());
             }
         }
         last_err = curr_err;
@@ -539,12 +543,14 @@ namespace xarm_control
 			int ret = xarm_driver_.arm->set_state(XARM_STATE::STOP);
 			ROS_ERROR("XArmHW::Write() failed, failed_ret=%d !, Setting Robot State to STOP... (ret: %d)", write_code_, ret);
 			if (write_code_ == SERVICE_IS_PERSISTENT_BUT_INVALID || write_code_ == SERVICE_CALL_FAILED) {
-				ROS_ERROR("service is invaild, ros shutdown");
+				// ROS_ERROR("service is invaild, ros shutdown");
+				ros_error("XARM API reports: service is invalid. Shutting down driver.");
 				ros::shutdown();
 				exit(1);
 			}
 			else if (write_code_ == XARM_IS_DISCONNECTED) {
-				ROS_ERROR("xArm is disconnected, ros shutdown");
+				// ROS_ERROR("xArm is disconnected, ros shutdown");
+				ros_error("XARM API reports: xArm is disconnected. Shutting down driver.");
 				ros::shutdown();
 				exit(1);
 			}
@@ -552,6 +558,23 @@ namespace xarm_control
 		}
 		return is_not_ready || !write_succeed || read_code_ != 0 || !read_ready_;
 	}
+
+	// this ros_error takes a string and publishes it to the console using ROS_ERROR, and also
+	// publishes the same string to ~diagnostics
+	void XArmHW::ros_error(std::string errstring)
+	{
+		ROS_ERROR("[XARMHW ns: %s] %s", hw_ns_.c_str(), errstring.c_str());
+		double now = ros::Time::now().toSec();
+		if (diag_pub_->trylock())
+		{
+			// construct json manually to avoid nlohmann::json dependency
+			diag_pub_->msg_.data = "{\"level\": \"error\", \"timestamp\": " + 
+									std::to_string(now) + ", \"message\": \"" + 
+									errstring +"\", \"source\": \"xArm hw driver\"}";
+		}
+		diag_pub_->unlockAndPublish();
+	}
+
 }
 
 PLUGINLIB_EXPORT_CLASS(xarm_control::XArmHW, hardware_interface::RobotHW)
