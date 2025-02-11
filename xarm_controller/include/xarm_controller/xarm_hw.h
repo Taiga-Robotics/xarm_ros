@@ -53,11 +53,12 @@ namespace xarm_control
 		virtual void read(const ros::Time& time, const ros::Duration& period);
 		virtual void write(const ros::Time& time, const ros::Duration& period);
 
-		/* TODO:
-		virtual bool prepareSwitch(const std::list<ControllerInfo>& start_list,
-	                             const std::list<ControllerInfo>& stop_list) { return true; }
-	  	virtual void doSwitch(const std::list<ControllerInfo>& ,
-	                        const std::list<ControllerInfo>& ) {}*/
+
+		bool prepareSwitch(const std::list<hardware_interface::ControllerInfo>& start_list,
+	                             const std::list<hardware_interface::ControllerInfo>& stop_list);
+
+	  	void doSwitch(const std::list<hardware_interface::ControllerInfo>& ,
+	                        const std::list<hardware_interface::ControllerInfo>& ) {}
 		
 		/* get current arm status: in the order of state, mode and error_code */
 		void get_status(int state_mode_err[3]);
@@ -132,7 +133,7 @@ namespace xarm_control
 		xarm_api::XArmDriver xarm_driver_;
 
 		urdf::ModelInterfaceSharedPtr model_ptr_;
-		ControlMethod ctrl_method_;
+		ControlMethod ctrl_method_;					//driver configured control method, does not support swapping at runtime.
 
 		hardware_interface::JointStateInterface    js_interface_;
 		hardware_interface::EffortJointInterface   ej_interface_;
@@ -146,6 +147,11 @@ namespace xarm_control
 		joint_limits_interface::PositionJointSoftLimitsInterface pj_limits_interface_;
 		joint_limits_interface::VelocityJointSaturationInterface vj_sat_interface_;
 		joint_limits_interface::VelocityJointSoftLimitsInterface vj_limits_interface_;
+
+		std::vector<joint_limits_interface::JointLimits> joint_limits_;
+
+		enum JointCmdMode {MD_INVALID, MD_NONE, MD_POSITION, MD_VELOCITY, MD_EFFORT};
+		JointCmdMode cmd_mode_=MD_INVALID;
 
 		ros::Subscriber pos_sub_, vel_sub_, effort_sub_, state_sub_;
 		// ros::Subscriber wrench_sub_;
@@ -163,6 +169,9 @@ namespace xarm_control
 		bool _xarm_is_ready_read(void);
         bool _xarm_is_ready_write(void);
 		bool _firmware_version_is_ge(int major, int minor, int revision);
+
+		bool load_joint_limits();
+		bool checkLimit(std::string &message);
 	};
 
 }

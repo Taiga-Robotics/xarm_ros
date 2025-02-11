@@ -73,6 +73,62 @@ namespace xarm_control
 				joint_limits.has_position_limits, joint_limits.min_position, joint_limits.max_position);
 	}
 
+	bool XArmHW::load_joint_limits()
+	{
+		joint_limits_interface::JointLimits limits;
+		for(unsigned int jid=0; jid < dof_; jid++)
+		{
+			urdf::JointConstSharedPtr urdf_joint = model_ptr_->getJoint(jnt_names_[jid]);
+			if(!joint_limits_interface::getJointLimits(urdf_joint, limits)){
+        		ROS_ERROR("[INTERFACE] [RegisterJointLimits] NO LIMIT spefified in URDF for joint: %s", jnt_names_[jid].c_str());
+        		return false;
+    		}
+			//ROS PARAM OVERWRIDES:
+			if(!joint_limits_interface::getJointLimits(jnt_names_[jid], hw_nh_, limits)){
+				ROS_WARN("[INTERFACE] [RegisterJointLimits] NO OVERRIDE limits on paramserver, it is mandatory to add limits for: %s", jnt_names_[jid].c_str());
+				return false;
+			}
+
+			//make sure the required limits exist
+    		if(!limits.has_position_limits | !limits.has_velocity_limits){
+        		ROS_ERROR("[INTERFACE] [RegisterJointLimits] NOT ALL REQUIRED LIMITS SPECIFIED for: %s. Required: position, velocity", jnt_names_[jid].c_str());
+        		return false;
+    		}
+
+			joint_limits_.push_back(limits);
+		}
+		return(true);
+	}
+
+	/* checkLimit(): check if any of the joint positions are outside of the limits.
+                    - returns false if any joints are violating position limits
+                    - message will be modified to contain a string indicating the violating joint(s)
+	*/
+	bool XArmHW::checkLimit(std::string &message)
+	{
+		bool will_succeed = true;
+		for(int i=0; i<dof_; i++)
+		{
+			if(joint_limits_[i].has_position_limits)
+			{
+				if(position_states_[i] > joint_limits_[i].max_position)
+				{
+					message += "Joint " + jnt_names_[i] + " above maximum position of " + std::to_string(joint_limits_[i].max_position) + "\n";
+					will_succeed=false;
+				}
+				else if(position_states_[i] < joint_limits_[i].min_position)
+				{
+					message += "Joint " + jnt_names_[i] + " below minimum position of " + std::to_string(joint_limits_[i].min_position) + "\n";
+					will_succeed=false;
+				}
+				
+			}
+		}
+		
+		if(will_succeed) message = "All joint positions inside limits.";
+		return(will_succeed);
+	}
+
 	void XArmHW::clientInit(const std::string& robot_ip, ros::NodeHandle& root_nh)
 	{
 		// prev_cmds_float_.resize(dof_);
@@ -125,6 +181,9 @@ namespace xarm_control
 			_register_joint_limits(root_nh, jnt_names_[j], ctrl_method_);
 	  	}
 
+		// redo the joint limits to get them stored in a useful structure for later checking
+		load_joint_limits();
+
 		// fts_interface_.registerHandle(hardware_interface::ForceTorqueSensorHandle(
 		// 	force_torque_sensor_name_, force_torque_sensor_frame_id_, force_, torque_));
 
@@ -150,6 +209,9 @@ namespace xarm_control
 	  	// int ret1 = xarm.motionEnable(1);
 	  	// int ret2 = xarm.setMode(ctrl_method_ == VELOCITY ? XARM_MODE::VELO_JOINT : XARM_MODE::SERVO);
 	  	// int ret3 = xarm.setState(XARM_STATE::START);		  
+
+		// controller claimed resources, set to none after init.
+		cmd_mode_ = MD_NONE;
 	}
 
 	bool XArmHW::init(ros::NodeHandle& root_nh, ros::NodeHandle& robot_hw_nh)
@@ -356,6 +418,63 @@ namespace xarm_control
 		}
 	}
 
+	bool XArmHW::prepareSwitch(const std::list<hardware_interface::ControllerInfo>& start_list,
+	                             const std::list<hardware_interface::ControllerInfo>& stop_list)
+	{
+		// review incoming controllers for control mode (position, velocity, effort etc.)
+
+		
+		// check current position against limits before allowing controller to start
+		std::string limit_msg = "";
+		bool result = checkLimit(limit_msg);
+		if(!result) 
+		{
+			//allow the JSC to start even if we're out of bounds.
+			if( (start_list.size() == 1) && (start_list.front().type == "joint_state_controller/JointStateController") )
+			{
+				ROS_WARN("Allowing switch controllers to load the joint state controller ONLY. Due to limits violation no other controllers will be permitted, the following joints are out of bounds:\n %s", limit_msg.c_str());
+			}else if (start_list.size()==0)
+			{
+				// No controllers are being started, it's probably a stop request. No need to fail.
+				result=true;
+			}
+			else
+			{
+				ROS_ERROR("Failed to switch controllers due to limits violation, the following joints are out of bounds:\n %s", limit_msg.c_str());
+				return(false);
+			}
+		}
+
+		// If a controller with claimed resources is being stopped nothing is being commanded.
+		for(auto controller : stop_list){
+			for(auto resource : controller.claimed_resources){
+				for(auto res : resource.resources){ 
+					cmd_mode_ = MD_NONE;
+				}
+			}
+		}
+
+		// review all controllers for command mode
+		// really only one controller with claimed resources can run at a time, 
+		// and only one type of resource can be claimed at a time
+		for(auto controller : start_list){
+			for(auto resource : controller.claimed_resources){
+				if(resource.hardware_interface =="hardware_interface::PositionJointInterface"){
+					cmd_mode_ = MD_POSITION;
+				}
+				else if( resource.hardware_interface =="hardware_interface::VelocityJointInterface"){
+					cmd_mode_ = MD_VELOCITY;
+				}
+				else if( resource.hardware_interface =="hardware_interface::EffortJointInterface"){
+					cmd_mode_ = MD_EFFORT;
+				}
+			}
+		}
+
+		return result;
+
+	}
+
 	void XArmHW::read(const ros::Time& time, const ros::Duration& period)
 	{
 		read_cnts_ += 1;
@@ -423,6 +542,18 @@ namespace xarm_control
 			return;
 		}
 		initialized_ = true;
+
+		// when no controller has claimed resources do NOT forward any commands.
+		if((cmd_mode_==MD_NONE) || (cmd_mode_==MD_INVALID)) 
+		{
+			// guarantee zero velocity when the driver has been configured for velocity control
+			if(ctrl_method_==VELOCITY)
+			{
+				float zeros[7] = {0,0,0,0,0,0};
+				xarm_driver_.arm->vc_set_joint_velocity(zeros, true, velo_duration);
+			}
+			return;
+		}
 
 		_enforce_limits(period);
 
